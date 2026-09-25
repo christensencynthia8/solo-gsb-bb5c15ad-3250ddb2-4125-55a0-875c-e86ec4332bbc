@@ -631,6 +631,13 @@ main .btn:hover { background: var(--muted-bg); color: var(--ink); }
 .away-records { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; }
 .away-rec a { cursor: pointer; }
 
+/* ---------- 人员同时持有上限排查 ---------- */
+.panel-holding { margin-bottom: 16px; }
+.holding-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.holding-head h2 span { color: var(--brand); }
+.holding-peak { padding: 0 18px 10px; font-size: 13px; color: var(--ink-soft); }
+.holding-peak strong { color: var(--ink); }
+
 /* ---------- 交接记录变更影响预演 ---------- */
 .panel-impact { margin-bottom: 16px; }
 .impact-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

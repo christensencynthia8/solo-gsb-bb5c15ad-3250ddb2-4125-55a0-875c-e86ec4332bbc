@@ -28,6 +28,7 @@
         <button id="btn-verified-chain" class="btn">✅ 已核实交接链</button>
         <button id="btn-signoff-plan" class="btn btn-accent">🧩 跨道具补签计划</button>
         <button id="btn-away-timeout" class="btn btn-accent">⏱ 连续离仓超时排查</button>
+        <button id="btn-holding-limit" class="btn btn-accent">👥 持有上限排查</button>
         <button id="btn-reverify" class="btn" title="重新读取记录并按时间重放">↻ 重新核验</button>
       </div>
     </div>
@@ -185,6 +186,31 @@
       <div id="away-undeterminable" class="resp-und"></div>
       <div id="away-conflicts" class="splan-conflicts"></div>
       <div class="splan-readonly">排查只读：按同分钟唯一交接链逐件重放截止时刻内的记录，不会修改任何交接记录或签收。</div>
+    </section>
+
+    <!-- 人员同时持有上限排查结果（查询后即时展示，只读、不改写记录或签收） -->
+    <section id="holding-panel" class="panel panel-holding hidden">
+      <div class="panel-head holding-head">
+        <h2>👥 同时持有上限排查 · <span id="holding-person-label">-</span> · 第 <span id="holding-start-label">-</span> – <span id="holding-end-label">-</span> 分钟（起止均含）· 上限 <span id="holding-limit-label">-</span> 件</h2>
+        <button type="button" class="btn btn-sm" id="btn-holding-close" title="关闭排查结果">✕ 关闭</button>
+      </div>
+      <div class="inv-summary" id="holding-summary"></div>
+      <div id="holding-peak" class="holding-peak"></div>
+      <div class="resp-section-title">超过上限的连续分钟段（确定超限）</div>
+      <div class="table-wrap">
+        <table class="table" id="holding-table">
+          <thead>
+            <tr>
+              <th class="col-rowno">#</th><th>连续分钟段</th><th>已知持有件数</th>
+              <th>涉及道具（确定持有）</th><th>未知道具</th><th>说明</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="holding-undeterminable" class="resp-und"></div>
+      <div id="holding-conflicts" class="splan-conflicts"></div>
+      <div class="splan-readonly">排查只读：沿同分钟唯一交接链逐件重放窗口内记录，以交接分钟为边界合并持有状态，不会修改任何交接记录或签收。</div>
     </section>
 
     <!-- 交接记录变更影响预演结果（只读模拟，不写入记录或签收） -->
@@ -611,6 +637,44 @@
         <label class="field">
           <span>允许离仓分钟数 <em>*</em></span>
           <input type="number" id="away-threshold" min="0" step="1" required placeholder="如 10" />
+        </label>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn" data-close>取消</button>
+        <button type="submit" class="btn btn-primary">开始排查</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 人员同时持有上限排查查询弹窗 -->
+  <dialog id="holding-dialog" class="dialog">
+    <form method="dialog" id="holding-form">
+      <h3>人员同时持有上限排查</h3>
+      <p class="dialog-tip">
+        输入<strong>人员姓名、起止分钟（起止均含）与持有件数上限</strong>：系统沿现有
+        <strong>同分钟唯一交接链</strong>逐件重放窗口内记录，以交接分钟为边界，取各道具在该分钟
+        <strong>全部交接完成后</strong>的持有人，合并出该人员的连续持有时段。
+        已知持有数<strong>严格超过</strong>上限的连续分钟段判为确定超限（等于上限不算）；
+        冲突道具<strong>自冲突分钟起视为未知</strong>——已知持有数已超上限时仍判确定超限，
+        否则含未知道具的时段标为「无法判定」（未知不计为零）；窗口结束分钟之后的冲突不影响结果。
+        查询只读，不改写任何交接记录或签收。
+      </p>
+      <label class="field">
+        <span>人员姓名 <em>*</em></span>
+        <input type="text" id="holding-person" maxlength="30" required list="people-list" placeholder="如 张三" />
+      </label>
+      <div class="field-row">
+        <label class="field">
+          <span>起始分钟（含） <em>*</em></span>
+          <input type="number" id="holding-start" min="0" step="1" required placeholder="如 0" />
+        </label>
+        <label class="field">
+          <span>结束分钟（含） <em>*</em></span>
+          <input type="number" id="holding-end" min="0" step="1" required placeholder="如 12" />
+        </label>
+        <label class="field">
+          <span>持有件数上限 <em>*</em></span>
+          <input type="number" id="holding-limit" min="0" step="1" required placeholder="如 2" />
         </label>
       </div>
       <div class="dialog-actions">

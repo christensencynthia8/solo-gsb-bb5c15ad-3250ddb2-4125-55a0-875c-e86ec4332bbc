@@ -20,6 +20,7 @@ const {
 } = require('./src/signoff');
 const { buildSignoffPlan, MAX_BUDGET } = require('./src/signoff-plan');
 const { investigateAwayTimeouts } = require('./src/away-timeout');
+const { investigateHoldingLimit } = require('./src/holding-limit');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -425,6 +426,34 @@ app.get('/api/away-timeout', (req, res) => {
 
   // 纯读取 + 即时重放，不写入任何记录或签收
   res.json(investigateAwayTimeouts(store.getData(), minute, threshold));
+});
+
+/* ---------------- 人员同时持有上限排查（只读，即时重放，不写入记录 / 签收） ---------------- */
+
+app.get('/api/holding-limit', (req, res) => {
+  let person;
+  let startMinute;
+  let endMinute;
+  let limit;
+  try {
+    person = nonEmpty(req.query.person, '人员姓名');
+    if (person.length > 30) throw new Error('人员姓名最长 30 个字符');
+    startMinute = parseMinute(req.query.start, '起始分钟');
+    endMinute = parseMinute(req.query.end, '结束分钟');
+    if (startMinute > endMinute) throw new Error('起始分钟不能大于结束分钟');
+    if (req.query.limit === undefined || req.query.limit === null || req.query.limit === '') {
+      throw new Error('持有件数上限不能为空');
+    }
+    limit = Number(req.query.limit);
+    if (!Number.isInteger(limit) || limit < 0) {
+      throw new Error('持有件数上限必须是不小于 0 的整数（件）');
+    }
+  } catch (err) {
+    return badRequest(res, err.message);
+  }
+
+  // 纯读取 + 即时重放，不写入任何记录或签收
+  res.json(investigateHoldingLimit(store.getData(), person, startMinute, endMinute, limit));
 });
 
 /* ---------------- 批量交接预演（预演不落盘，提交一次写入） ---------------- */
