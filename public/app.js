@@ -150,6 +150,24 @@ const els = {
   awayUnd: $('#away-undeterminable'),
   awayConflicts: $('#away-conflicts'),
   btnAwayClose: $('#btn-away-close'),
+  // 人员同时持有上限排查（只读）
+  btnHoldingLimit: $('#btn-holding-limit'),
+  hlimitDialog: $('#hlimit-dialog'),
+  hlimitForm: $('#hlimit-form'),
+  hlimitPersonInput: $('#hlimit-person-input'),
+  hlimitStartInput: $('#hlimit-start-input'),
+  hlimitEndInput: $('#hlimit-end-input'),
+  hlimitLimitInput: $('#hlimit-limit-input'),
+  hlimitPanel: $('#hlimit-panel'),
+  hlimitPerson: $('#hlimit-person'),
+  hlimitStart: $('#hlimit-start'),
+  hlimitEnd: $('#hlimit-end'),
+  hlimitLimit: $('#hlimit-limit'),
+  hlimitSummary: $('#hlimit-summary'),
+  hlimitOverTableBody: document.querySelector('#hlimit-over-table tbody'),
+  hlimitUnd: $('#hlimit-und'),
+  hlimitConflicts: $('#hlimit-conflicts'),
+  btnHlimitClose: $('#btn-hlimit-close'),
   // 交接记录变更影响预演（只读）
   btnChangeImpact: $('#btn-change-impact'),
   impactDialog: $('#impact-dialog'),
@@ -684,6 +702,14 @@ function bindEvents() {
     const link = e.target.closest?.('[data-record-id]');
     if (link) locateRecord(link.dataset.recordId);
   });
+
+  // 人员同时持有上限排查（只读）
+  els.btnHoldingLimit.addEventListener('click', openHlimitDialog);
+  els.hlimitForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    submitHoldingLimit();
+  });
+  els.btnHlimitClose.addEventListener('click', () => els.hlimitPanel.classList.add('hidden'));
 
   // 批量交接预演
   els.btnBatch.addEventListener('click', openBatchDialog);
@@ -1971,6 +1997,145 @@ async function submitAwayTimeout() {
     els.awayDialog.close();
     renderAwayResult(result);
     toast('连续离仓超时排查完成（只读，未改动记录或签收）');
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+/* ==================== 人员同时持有上限排查（只读） ==================== */
+
+function openHlimitDialog() {
+  els.hlimitStartInput.value = 0;
+  els.hlimitEndInput.value = state.verification.endMinute || 0;
+  els.hlimitLimitInput.value = 2;
+  els.hlimitDialog.showModal();
+}
+
+function hlimitPropsHtml(props) {
+  if (!props.length) return '<span class="inv-dash">无</span>';
+  return props.map((p) => `<span class="away-rec">${esc(p.propName)}</span>`).join('、');
+}
+
+function hlimitUnknownHtml(props) {
+  if (!props.length) return '<span class="inv-dash">无</span>';
+  return props.map((p) =>
+    `<span class="away-rec">${esc(p.propName)}（第${p.conflictMinute}分起未知）</span>`
+  ).join('；');
+}
+
+function renderHlimitResult(result) {
+  els.hlimitPerson.textContent = result.person;
+  els.hlimitStart.textContent = result.startMinute;
+  els.hlimitEnd.textContent = result.endMinute;
+  els.hlimitLimit.textContent = result.limit;
+
+  const s = result.summary;
+  const peakText = result.peak.segments.length
+    ? `已知峰值 ${result.peak.knownPeak} 件（${result.peak.segments
+        .map((seg) => `第${seg.startMinute}–${seg.endMinute}分`)
+        .join('、')}）`
+    : `已知峰值 ${result.peak.knownPeak} 件（全程未持有）`;
+  const chips = [
+    [`确定超限 ${s.overLimitCount} 段`, s.overLimitCount > 0 ? 'chip-bad' : 'chip-ok'],
+    [`无法判定 ${s.undeterminableCount} 段`, s.undeterminableCount > 0 ? 'chip-warn' : ''],
+    [peakText, result.peak.knownPeak > result.limit ? 'chip-bad' : ''],
+    [`冲突道具 ${s.conflictPropCount} 件`, s.conflictPropCount > 0 ? 'chip-warn' : 'chip-muted'],
+    [`道具总数 ${s.totalProps} 件`, 'chip-muted'],
+  ];
+  els.hlimitSummary.innerHTML = chips
+    .map(([text, cls]) => `<span class="inv-chip ${cls}">${text}</span>`)
+    .join('');
+
+  if (result.overLimitSegments.length === 0) {
+    els.hlimitOverTableBody.innerHTML =
+      `<tr><td colspan="6" class="empty">第 ${result.startMinute} – ${result.endMinute} 分钟，` +
+      `没有确定超过 ${result.limit} 件的连续分钟段。</td></tr>`;
+  } else {
+    els.hlimitOverTableBody.innerHTML = result.overLimitSegments.map((seg, i) => `
+      <tr class="inv-row-CONFLICT">
+        <td class="cell-minute">${i + 1}</td>
+        <td class="cell-minute">第${seg.startMinute} – ${seg.endMinute} 分钟</td>
+        <td class="cell-minute"><strong>${seg.knownCount}</strong> ＞ ${result.limit}</td>
+        <td class="away-records">${hlimitPropsHtml(seg.knownProps)}</td>
+        <td class="away-records">${hlimitUnknownHtml(seg.unknownProps)}</td>
+        <td class="inv-note">${esc(seg.note)}</td>
+      </tr>`).join('');
+  }
+
+  if (result.undeterminableSegments.length === 0) {
+    els.hlimitUnd.innerHTML = '';
+  } else {
+    els.hlimitUnd.innerHTML = `
+      <div class="resp-und-head">？ 无法判定（${result.undeterminableSegments.length} 段）：确定持有数未超上限，但含未知道具，若均由其持有将超过上限</div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th class="col-rowno">#</th><th>分钟段（起止均含）</th><th>确定持有数</th><th>确定持有道具</th><th>未知道具（自冲突分钟起未知）</th><th>说明</th></tr></thead>
+          <tbody>${result.undeterminableSegments.map((seg, i) => `
+            <tr class="inv-row-UNKNOWN">
+              <td class="cell-minute">${i + 1}</td>
+              <td class="cell-minute">第${seg.startMinute} – ${seg.endMinute} 分钟</td>
+              <td class="cell-minute">${seg.knownCount}（至多 ${seg.maxPossibleCount}）</td>
+              <td class="away-records">${hlimitPropsHtml(seg.knownProps)}</td>
+              <td class="away-records">${hlimitUnknownHtml(seg.unknownProps)}</td>
+              <td class="inv-note">${esc(seg.note)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  if (result.conflicts.length === 0) {
+    els.hlimitConflicts.innerHTML = '';
+  } else {
+    els.hlimitConflicts.innerHTML = `
+      <div class="resp-section-title">窗内发生链冲突的道具（自冲突分钟起视为未知）</div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>道具</th><th>冲突分钟</th><th>冲突类型</th><th>说明</th></tr></thead>
+          <tbody>${result.conflicts.map((c) => `
+            <tr class="inv-row-CONFLICT">
+              <td><strong>${esc(c.propName)}</strong></td>
+              <td class="cell-minute">第${c.conflictMinute}分</td>
+              <td>${c.conflictType === 'AMBIGUOUS' ? '多条可接续（链不唯一）' : '无法接续（断链）'}</td>
+              <td class="inv-note">${esc(c.reason)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  els.hlimitPanel.classList.remove('hidden');
+  els.hlimitPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function submitHoldingLimit() {
+  const person = els.hlimitPersonInput.value.trim();
+  const start = Number(els.hlimitStartInput.value);
+  const end = Number(els.hlimitEndInput.value);
+  const limit = Number(els.hlimitLimitInput.value);
+  if (!person) {
+    toast('人员姓名不能为空', true);
+    return;
+  }
+  if (!Number.isInteger(start) || start < 0 || !Number.isInteger(end) || end < 0) {
+    toast('起止分钟必须是不小于 0 的整数', true);
+    return;
+  }
+  if (start > end) {
+    toast('起始分钟不能大于结束分钟', true);
+    return;
+  }
+  if (!Number.isInteger(limit) || limit < 0) {
+    toast('持有件数上限必须是不小于 0 的整数', true);
+    return;
+  }
+  try {
+    const result = await api(
+      `/api/holding-limit?person=${encodeURIComponent(person)}&start=${start}&end=${end}&limit=${limit}`
+    );
+    els.hlimitDialog.close();
+    renderHlimitResult(result);
+    toast('同时持有上限排查完成（只读，未改动记录或签收）');
   } catch (err) {
     toast(err.message, true);
   }
